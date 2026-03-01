@@ -21,8 +21,13 @@ describe('InsertMcqTool', () => {
     const ds = {
       transaction: jest.fn(async (cb: (arg0: typeof em) => unknown) => cb(em)),
     };
+    const logger = {
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    };
 
-    const tool = new InsertMcqTool(ds as never);
+    const tool = new InsertMcqTool(ds as never, logger as never);
 
     const result = await tool.run({
       event: 'material.generated',
@@ -33,7 +38,7 @@ describe('InsertMcqTool', () => {
         user_id: 'user-1',
         document_id: 'doc-1',
         attempt: 1,
-        finished_at:new Date( '2026-03-01T09:00:00.000Z'),
+        finished_at:'2026-03-01T09:00:00.000Z',
         material: {
           filename: 'file.pdf',
           file_type: 'application/pdf',

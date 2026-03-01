@@ -13,7 +13,7 @@ import { McqQuestion } from './entities/mcq-question.entity';
 import { EssayQuiz } from './entities/essay-quiz.entity';
 import { EssayQuestion } from './entities/essay-question.entity';
 import { Summary } from './entities/summary.entity';
-import { McpController } from './mcp.controller';
+// import { McpController } from './mcp.controller';
 
 @Module({
   imports: [
@@ -37,7 +37,7 @@ import { McpController } from './mcp.controller';
       },
     }),
   ],
-  controllers: [McpController],
+  // controllers: [McpController],
   providers: [InsertMcqTool, InsertEssayTool, InsertSummaryTool],
 })
 export class RtmMcpModule {}

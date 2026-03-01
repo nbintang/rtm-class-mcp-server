@@ -11,9 +11,12 @@ export const BaseGeneratedSchema = z.object({
   job_id: z.string(),
   status: z.string(),
   user_id: z.string(),
+
   result: z.object({
     user_id: z.string(),
     document_id: z.string(),
+    attempt: z.number().int().optional(),
+    finished_at: z.string().datetime().optional(),
     material: z.object({
       filename: z.string(),
       file_type: z.string(),
@@ -22,7 +25,5 @@ export const BaseGeneratedSchema = z.object({
     sources: z.array(SourceSchema).default([]),
     tool_calls: z.array(z.any()).optional().default([]),
     warnings: z.array(z.string()).optional().default([]),
-    attempt: z.number().int().optional(),
-    finished_at: z.date().optional(),
   }),
 });
