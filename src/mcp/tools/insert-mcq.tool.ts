@@ -13,7 +13,7 @@ export class InsertMcqTool {
   constructor(private readonly ds: DataSource) {}
 
   @Tool({
-    name: 'db_insert_mcq_generated',
+    name: 'insert_mcq',
     description:
       'Insert payload "mcq quiz generated" (event material.generated) ke DB.',
     parameters: McqGeneratedSchema,

@@ -23,6 +23,6 @@ export const BaseGeneratedSchema = z.object({
     tool_calls: z.array(z.any()).optional().default([]),
     warnings: z.array(z.string()).optional().default([]),
     attempt: z.number().int().optional(),
-    finished_at: z.string().datetime().optional(), // ISO string
+    finished_at: z.date().optional(),
   }),
 });

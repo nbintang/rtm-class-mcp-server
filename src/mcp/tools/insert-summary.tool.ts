@@ -15,7 +15,7 @@ export class InsertSummaryTool {
   constructor(private readonly ds: DataSource) {}
 
   @Tool({
-    name: 'db_insert_summary_generated',
+    name: 'insert_summary',
     description:
       'Insert payload "summary generated" (event material.generated) ke DB.',
     parameters: SummaryGeneratedSchema,

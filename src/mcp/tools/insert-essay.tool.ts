@@ -16,7 +16,7 @@ export class InsertEssayTool {
   constructor(private readonly ds: DataSource) {}
 
   @Tool({
-    name: 'db_insert_essay_generated',
+    name: 'insert_essay',
     description:
       'Insert payload "essay generated" (event material.generated) ke DB.',
     parameters: EssayGeneratedSchema,
