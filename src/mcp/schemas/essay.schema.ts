@@ -3,7 +3,7 @@ import { BaseGeneratedSchema } from './generated.schema';
 
 const EssayQuestionSchema = z.object({
   question: z.string(),
-  expected_points: z.string(), // payload kamu string "5"
+  expected_points: z.string(),
 });
 
 export const EssayGeneratedSchema = BaseGeneratedSchema.extend({

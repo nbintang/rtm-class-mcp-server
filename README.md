@@ -1,98 +1,161 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# RTM Class MCP Server
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS + Fastify service for storing generated learning content into PostgreSQL.  
+This project exposes HTTP endpoints and MCP tools for:
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- MCQ quiz insertion
+- Essay quiz insertion
+- Summary insertion
 
-## Description
+## Tech Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Node.js + NestJS 11
+- Fastify (`@nestjs/platform-fastify`)
+- TypeORM + PostgreSQL
+- Zod + `nestjs-zod` for request DTO validation
+- Jest (unit + e2e)
 
-## Project setup
+## Project Structure
 
-```bash
-$ npm install
+- `src/config` configuration schema and typed config service
+- `src/database` TypeORM data source/module setup
+- `src/mcp/entities` database entities
+- `src/mcp/schemas` Zod schemas for payloads
+- `src/mcp/dto` DTO classes generated from Zod schemas
+- `src/mcp/tools` MCP tool implementations
+- `src/mcp/mcp.controller.ts` HTTP API endpoints
+- `src/mcp/migrations` TypeORM migrations
+- `test` e2e test suites
+
+## Requirements
+
+- Node.js 20+
+- PostgreSQL 14+
+- npm
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and set values:
+
+```env
+NODE_ENV=development
+PORT=3030
+PY_AI_BASE_URL=http://localhost:8000
+
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=postgres
+DB_NAME=rtm
+DB_SYNC=false
 ```
 
-## Compile and run the project
+Notes:
+
+- `PORT` defaults to `3000` in schema if not provided.
+- `DB_SYNC=false` is recommended when using migrations.
+
+## Install
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
+## Run
+
+```bash
+# development (watch mode)
+npm run start:dev
+
+# production build + run
+npm run build
+npm run start:prod
+```
+
+## API Endpoints
+
+Base path:
+
+- `POST /api/mcp/insert/mcq`
+- `POST /api/mcp/insert/essay`
+- `POST /api/mcp/insert/summary`
+
+Validation:
+
+- Request body is validated by `nestjs-zod` DTOs built from Zod schemas.
+- Invalid payload returns `400 Bad Request`.
+
+### Example: Insert MCQ
+
+```bash
+curl -X POST http://localhost:3030/api/mcp/insert/mcq \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "material.generated",
+    "job_id": "job-1",
+    "status": "SUCCESS",
+    "user_id": "user-1",
+    "result": {
+      "user_id": "user-1",
+      "document_id": "doc-1",
+      "material": {
+        "filename": "file.pdf",
+        "file_type": "application/pdf",
+        "extracted_chars": 1200
+      },
+      "sources": [
+        { "chunk_id": "c1", "source_id": "s1", "excerpt": "text" }
+      ],
+      "warnings": [],
+      "attempt": 1,
+      "mcq_quiz": {
+        "questions": [
+          {
+            "question": "What is A?",
+            "options": ["A", "B", "C", "D"],
+            "correct_answer": "A",
+            "explanation": "Because A"
+          }
+        ]
+      }
+    }
+  }'
+```
+
+## Database Migration
+
+```bash
+# generate migration
+npm run migration:generate
+
+# run migration
+npm run migration:run
+
+# revert migration
+npm run migration:revert
+```
+
+## Testing
 
 ```bash
 # unit tests
-$ npm run test
+npm run test
 
 # e2e tests
-$ npm run test:e2e
+npm run test:e2e
 
-# test coverage
-$ npm run test:cov
+# coverage
+npm run test:cov
 ```
 
-## Deployment
+## Current Test Coverage Scope
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Tool unit tests:
+  - `insert-mcq.tool.spec.ts`
+  - `insert-essay.tool.spec.ts`
+  - `insert-summary.tool.spec.ts`
+- Controller unit test:
+  - `mcp.controller.spec.ts`
+- e2e tests:
+  - `app.e2e-spec.ts`
+  - `mcp.e2e-spec.ts`

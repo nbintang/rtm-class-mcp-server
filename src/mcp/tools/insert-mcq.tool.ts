@@ -23,7 +23,6 @@ export class InsertMcqTool {
     const { event, job_id, status, user_id, result } = args;
 
     const saved = await this.ds.transaction(async (em) => {
-      // 1) insert job header (upsert by jobId)
       let job = await em.findOne(GenerationJob, { where: { jobId: job_id } });
 
       if (!job) {
@@ -44,7 +43,6 @@ export class InsertMcqTool {
         job = await em.save(job);
       }
 
-      // 2) sources (insert, no dedup for simplicity)
       if (result.sources?.length) {
         const sources = result.sources.map((s) =>
           em.create(GenerationSource, {
@@ -57,7 +55,6 @@ export class InsertMcqTool {
         await em.save(sources);
       }
 
-      // 3) warnings
       if (result.warnings?.length) {
         const warnings = result.warnings.map((w) =>
           em.create(GenerationWarning, { job, message: w }),
@@ -65,7 +62,6 @@ export class InsertMcqTool {
         await em.save(warnings);
       }
 
-      // 4) mcq quiz + questions
       const quiz = em.create(McqQuiz, {
         job,
         userId: result.user_id,
