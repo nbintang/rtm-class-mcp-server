@@ -3,8 +3,8 @@ import { Tool } from '@rekog/mcp-nest';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { DataSource } from 'typeorm';
 import {
-  SummaryGeneratedSchema,
-  type SummaryGeneratedT,
+  InsertSummarySchema,
+  type InsertSummaryT,
 } from '../schemas/summary.schema';
 import { GenerationJob } from '../entities/generation-job.entity';
 import { GenerationSource } from '../entities/generation-source.entity';
@@ -21,15 +21,33 @@ export class InsertSummaryTool {
 
   @Tool({
     name: 'insert_summary',
-    description:
-      'Insert payload "summary generated" (event material.generated) ke DB.',
-    parameters: SummaryGeneratedSchema,
+    description: 'Insert summary ke DB (minimal payload).',
+    parameters: InsertSummarySchema,
     annotations: { destructiveHint: true },
   })
-  async run(args: SummaryGeneratedT) {
-    const { event, job_id, status, user_id, result, attempt, finished_at } = args;
+  async run(args: InsertSummaryT) {
+    const {
+      event,
+      status,
+      job_id,
+      user_id,
+      document_id,
+      summary,
+      filename,
+      file_type,
+      extracted_chars,
+      sources,
+      warnings,
+    } = args;
+
+    const effectiveEvent = event ?? 'material.generated';
+    const effectiveStatus = status ?? 'succeeded';
+    const effectiveFilename = filename ?? `${document_id}.pdf`;
+    const effectiveFileType = file_type ?? 'application/pdf';
+    const effectiveExtractedChars = extracted_chars ?? 0;
+
     this.logger.log(
-      `insert_summary started job_id=${job_id} user_id=${user_id} status=${status}`,
+      `insert_summary started job_id=${job_id} user_id=${user_id} document_id=${document_id}`,
       InsertSummaryTool.name,
     );
 
@@ -40,21 +58,20 @@ export class InsertSummaryTool {
         if (!job) {
           job = em.create(GenerationJob, {
             jobId: job_id,
-            event,
-            status,
+            event: effectiveEvent,
+            status: effectiveStatus,
             userId: user_id,
-            documentId: result.document_id,
-            filename: result.material.filename,
-            fileType: result.material.file_type,
-            extractedChars: result.material.extracted_chars,
-       
+            documentId: document_id,
+            filename: effectiveFilename,
+            fileType: effectiveFileType,
+            extractedChars: effectiveExtractedChars,
           });
           job = await em.save(job);
         }
 
-        if (result.sources?.length) {
+        if (sources?.length) {
           await em.save(
-            result.sources.map((s) =>
+            sources.map((s) =>
               em.create(GenerationSource, {
                 job,
                 chunkId: s.chunk_id,
@@ -65,29 +82,29 @@ export class InsertSummaryTool {
           );
         }
 
-        if (result.warnings?.length) {
+        if (warnings?.length) {
           await em.save(
-            result.warnings.map((w) =>
+            warnings.map((w) =>
               em.create(GenerationWarning, { job, message: w }),
             ),
           );
         }
 
-        const summary = await em.save(
+        const savedSummary = await em.save(
           em.create(Summary, {
             job,
-            userId: result.user_id,
-            documentId: result.document_id,
-            title: result.summary.title,
-            overview: result.summary.overview,
-            keyPoints: result.summary.key_points,
+            userId: user_id,
+            documentId: document_id,
+            title: summary.title,
+            overview: summary.overview,
+            keyPoints: summary.key_points,
           }),
         );
 
         return {
           jobId: job.id,
-          summaryId: summary.id,
-          keyPoints: summary.keyPoints.length,
+          summaryId: savedSummary.id,
+          keyPoints: savedSummary.keyPoints.length,
         };
       });
 
