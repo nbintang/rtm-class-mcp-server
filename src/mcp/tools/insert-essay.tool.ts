@@ -1,16 +1,12 @@
-import { Inject, Injectable, type LoggerService } from '@nestjs/common';
-import { Tool } from '@rekog/mcp-nest';
-import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
-import { DataSource } from 'typeorm';
-import {
-  EssayGeneratedSchema,
-  type EssayGeneratedT,
-} from '../schemas/essay.schema';
-import { GenerationJob } from '../entities/generation-job.entity';
-import { GenerationSource } from '../entities/generation-source.entity';
-import { GenerationWarning } from '../entities/generation-warning.entity';
-import { EssayQuiz } from '../entities/essay-quiz.entity';
-import { EssayQuestion } from '../entities/essay-question.entity';
+import { Inject, Injectable, type LoggerService } from "@nestjs/common";
+import { Tool } from "@rekog/mcp-nest";
+import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
+import { DataSource } from "typeorm";
+
+import { InsertEssaySchema, type InsertEssayT } from "../schemas/essay.schema";
+import { GenerationJob } from "../entities/generation-job.entity";
+import { EssayQuiz } from "../entities/essay-quiz.entity";
+import { EssayQuestion } from "../entities/essay-question.entity";
 
 @Injectable()
 export class InsertEssayTool {
@@ -21,71 +17,70 @@ export class InsertEssayTool {
   ) {}
 
   @Tool({
-    name: 'insert_essay',
-    description:
-      'Insert payload "essay generated" (event material.generated) ke DB.',
-    parameters: EssayGeneratedSchema,
+    name: "insert_essay",
+    description: "Insert essay quiz ke DB (minimal payload).",
+    parameters: InsertEssaySchema,
     annotations: { destructiveHint: true },
   })
-  async run(args: EssayGeneratedT) {
-    const { event, job_id, status, user_id, result } = args;
+  async run(args: InsertEssayT) {
+    const { job_id, user_id, document_id, essay_quiz } = args;
+
     this.logger.log(
-      `insert_essay started job_id=${job_id} user_id=${user_id} status=${status}`,
+      `insert_essay started job_id=${job_id} user_id=${user_id} document_id=${document_id} questions=${essay_quiz.questions.length}`,
       InsertEssayTool.name,
     );
 
     try {
       const saved = await this.ds.transaction(async (em) => {
+        // 1) pastikan job ada (idealnya dibuat oleh webhook receiver / job-accepted flow)
         let job = await em.findOne(GenerationJob, { where: { jobId: job_id } });
 
         if (!job) {
-          job = em.create(GenerationJob, {
-            jobId: job_id,
-            event,
-            status,
-            userId: user_id,
-            documentId: result.document_id,
-            filename: result.material.filename,
-            fileType: result.material.file_type,
-            extractedChars: result.material.extracted_chars,
-            attempt: result.attempt,
-            finishedAt: result.finished_at
-              ? new Date(result.finished_at)
-              : undefined,
-          });
-          job = await em.save(job);
-        }
+          // Pilih salah satu:
+          // A) strict: throw supaya datanya selalu konsisten
+          // throw new Error(`GenerationJob not found for job_id=${job_id}`);
 
-        if (result.sources?.length) {
-          await em.save(
-            result.sources.map((s) =>
-              em.create(GenerationSource, {
-                job,
-                chunkId: s.chunk_id,
-                sourceId: s.source_id,
-                excerpt: s.excerpt,
-              }),
-            ),
+          // B) atau buat stub minimal (butuh kolom event/status nullable/default di entity)
+          job = await em.save(
+            em.create(GenerationJob, {
+              jobId: job_id,
+              userId: user_id,
+              documentId: document_id,
+              event: "material.generated",
+              status: "succeeded",
+              filename: `${document_id}.pdf`,
+              fileType: "application/pdf",
+              extractedChars: 0,
+            }),
           );
         }
 
-        if (result.warnings?.length) {
-          await em.save(
-            result.warnings.map((w) =>
-              em.create(GenerationWarning, { job, message: w }),
-            ),
-          );
+        // 2) idempotency sederhana: kalau sudah ada quiz utk job+document, skip
+        const existingQuiz = await em.findOne(EssayQuiz, {
+          where: { job: { id: job.id }, documentId: document_id },
+          relations: ["job"],
+        });
+
+        if (existingQuiz) {
+          return {
+            jobId: job.id,
+            essayQuizId: existingQuiz.id,
+            questionsInserted: 0,
+            note: "quiz already exists (idempotent no-op)",
+          };
         }
 
+        // 3) insert quiz
         const quiz = await em.save(
           em.create(EssayQuiz, {
             job,
-            userId: result.user_id,
-            documentId: result.document_id,
+            userId: user_id,
+            documentId: document_id,
           }),
         );
 
-        const questions = result.essay_quiz.questions.map((q) =>
+        // 4) insert questions
+        const questions = essay_quiz.questions.map((q) =>
           em.create(EssayQuestion, {
             quiz,
             question: q.question,

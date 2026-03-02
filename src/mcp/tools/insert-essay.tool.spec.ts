@@ -1,4 +1,5 @@
 import { InsertEssayTool } from './insert-essay.tool';
+import { GenerationJob } from '../entities/generation-job.entity';
 
 describe('InsertEssayTool', () => {
   it('should insert essay quiz and questions', async () => {
@@ -12,8 +13,6 @@ describe('InsertEssayTool', () => {
       save: jest
         .fn()
         .mockResolvedValueOnce(job)
-        .mockResolvedValueOnce([{ id: 'source-1' }])
-        .mockResolvedValueOnce([{ id: 'warning-1' }])
         .mockResolvedValueOnce(quiz)
         .mockResolvedValueOnce(savedQuestions),
     };
@@ -30,29 +29,14 @@ describe('InsertEssayTool', () => {
     const tool = new InsertEssayTool(ds as never, logger as never);
 
     const result = await tool.run({
-      event: 'material.generated',
       job_id: 'job-essay',
-      status: 'SUCCESS',
       user_id: 'user-1',
-      result: {
-        user_id: 'user-1',
-        document_id: 'doc-1',
-        attempt: 1,
-        finished_at: '2026-03-01T09:00:00.000Z',
-        material: {
-          filename: 'file.pdf',
-          file_type: 'application/pdf',
-          extracted_chars: 1000,
-        },
-        sources: [{ chunk_id: 'dwad', source_id: 'src-1', excerpt: 'text' }],
-        warnings: ['warning-1'],
-        tool_calls: [],
-        essay_quiz: {
-          questions: [
-            { question: 'Explain X', expected_points: '5' },
-            { question: 'Explain Y', expected_points: '10' },
-          ],
-        },
+      document_id: 'doc-1',
+      essay_quiz: {
+        questions: [
+          { question: 'Explain X', expected_points: '5' },
+          { question: 'Explain Y', expected_points: '10' },
+        ],
       },
     });
 
@@ -61,8 +45,21 @@ describe('InsertEssayTool', () => {
       essayQuizId: 'essay-quiz-1',
       questionsInserted: 2,
     });
+    expect(em.create).toHaveBeenCalledWith(
+      GenerationJob,
+      expect.objectContaining({
+        jobId: 'job-essay',
+        userId: 'user-1',
+        documentId: 'doc-1',
+        event: 'material.generated',
+        status: 'succeeded',
+        filename: 'doc-1.pdf',
+        fileType: 'application/pdf',
+        extractedChars: 0,
+      }),
+    );
     expect(ds.transaction).toHaveBeenCalledTimes(1);
-    expect(em.findOne).toHaveBeenCalledTimes(1);
-    expect(em.save).toHaveBeenCalledTimes(5);
+    expect(em.findOne).toHaveBeenCalledTimes(2);
+    expect(em.save).toHaveBeenCalledTimes(3);
   });
 });

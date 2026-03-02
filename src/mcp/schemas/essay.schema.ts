@@ -1,17 +1,17 @@
-import { z } from 'zod';
-import { BaseGeneratedSchema } from './generated.schema';
+import { z } from "zod";
 
 const EssayQuestionSchema = z.object({
-  question: z.string(),
-  expected_points: z.string(),
+  question: z.string().min(1),
+  expected_points: z.string().min(1),
 });
 
-export const EssayGeneratedSchema = BaseGeneratedSchema.extend({
-  result: BaseGeneratedSchema.shape.result.extend({
-    essay_quiz: z.object({
-      questions: z.array(EssayQuestionSchema),
-    }),
+export const InsertEssaySchema = z.object({
+  job_id: z.string().min(1),
+  user_id: z.string().min(1),
+  document_id: z.string().min(1),
+  essay_quiz: z.object({
+    questions: z.array(EssayQuestionSchema).min(1).max(10),
   }),
 });
 
-export type EssayGeneratedT = z.infer<typeof EssayGeneratedSchema>;
+export type InsertEssayT = z.infer<typeof InsertEssaySchema>;

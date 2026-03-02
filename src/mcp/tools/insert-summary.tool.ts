@@ -27,7 +27,7 @@ export class InsertSummaryTool {
     annotations: { destructiveHint: true },
   })
   async run(args: SummaryGeneratedT) {
-    const { event, job_id, status, user_id, result } = args;
+    const { event, job_id, status, user_id, result, attempt, finished_at } = args;
     this.logger.log(
       `insert_summary started job_id=${job_id} user_id=${user_id} status=${status}`,
       InsertSummaryTool.name,
@@ -47,10 +47,7 @@ export class InsertSummaryTool {
             filename: result.material.filename,
             fileType: result.material.file_type,
             extractedChars: result.material.extracted_chars,
-            attempt: result.attempt,
-            finishedAt: result.finished_at
-              ? new Date(result.finished_at)
-              : undefined,
+       
           });
           job = await em.save(job);
         }

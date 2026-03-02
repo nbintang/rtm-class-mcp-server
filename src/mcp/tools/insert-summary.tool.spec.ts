@@ -32,11 +32,11 @@ describe('InsertSummaryTool', () => {
       job_id: 'job-summary',
       status: 'SUCCESS',
       user_id: 'user-1',
+      attempt: 1,
+      finished_at: '2026-03-01T09:00:00.000Z',
       result: {
         user_id: 'user-1',
         document_id: 'doc-1',
-        attempt: 1,
-        finished_at: '2026-03-01T09:00:00.000Z',
         material: {
           filename: 'file.pdf',
           file_type: 'application/pdf',

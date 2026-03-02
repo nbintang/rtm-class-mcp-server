@@ -16,12 +16,12 @@ export class GenerationSource {
   job: GenerationJob;
 
   @Index()
-  @Column()
-  chunkId: string;
+  @Column({ type: 'varchar', nullable: true })
+  chunkId: string | null;
 
   @Index()
-  @Column()
-  sourceId: string;
+  @Column({ type: 'varchar', nullable: true })
+  sourceId: string | null;
 
   @Column('text')
   excerpt: string;

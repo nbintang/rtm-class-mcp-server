@@ -1,7 +1,8 @@
 import { InsertMcqTool } from './insert-mcq.tool';
+import { GenerationJob } from '../entities/generation-job.entity';
 
 describe('InsertMcqTool', () => {
-  it('should insert job, sources, warnings, and mcq questions', async () => {
+  it('should insert job, quiz, and mcq questions', async () => {
     const job = { id: 'job-db-id', jobId: 'job-1' };
     const quiz = { id: 'quiz-1' };
     const savedQuestions = [{ id: 'q1' }, { id: 'q2' }];
@@ -12,8 +13,6 @@ describe('InsertMcqTool', () => {
       save: jest
         .fn()
         .mockResolvedValueOnce(job)
-        .mockResolvedValueOnce([{ id: 'source-1' }])
-        .mockResolvedValueOnce([{ id: 'warning-1' }])
         .mockResolvedValueOnce(quiz)
         .mockResolvedValueOnce(savedQuestions),
     };
@@ -30,39 +29,24 @@ describe('InsertMcqTool', () => {
     const tool = new InsertMcqTool(ds as never, logger as never);
 
     const result = await tool.run({
-      event: 'material.generated',
       job_id: 'job-1',
-      status: 'SUCCESS',
       user_id: 'user-1',
-      result: {
-        user_id: 'user-1',
-        document_id: 'doc-1',
-        attempt: 1,
-        finished_at:'2026-03-01T09:00:00.000Z',
-        material: {
-          filename: 'file.pdf',
-          file_type: 'application/pdf',
-          extracted_chars: 1000,
-        },
-        sources: [{ chunk_id: 'dwad', source_id: 'src-1', excerpt: 'text' }],
-        warnings: ['warning-1'],
-        tool_calls: [],
-        mcq_quiz: {
-          questions: [
-            {
-              question: 'What is A?',
-              options: ['A', 'B', 'C', 'D'],
-              correct_answer: 'A',
-              explanation: 'Because A',
-            },
-            {
-              question: 'What is B?',
-              options: ['A', 'B', 'C', 'D'],
-              correct_answer: 'B',
-              explanation: 'Because B',
-            },
-          ],
-        },
+      document_id: 'doc-1',
+      mcq_quiz: {
+        questions: [
+          {
+            question: 'What is A?',
+            options: ['A', 'B', 'C', 'D'],
+            correct_answer: 'A',
+            explanation: 'Because A',
+          },
+          {
+            question: 'What is B?',
+            options: ['A', 'B', 'C', 'D'],
+            correct_answer: 'B',
+            explanation: 'Because B',
+          },
+        ],
       },
     });
 
@@ -71,8 +55,21 @@ describe('InsertMcqTool', () => {
       mcqQuizId: 'quiz-1',
       questionsInserted: 2,
     });
+    expect(em.create).toHaveBeenCalledWith(
+      GenerationJob,
+      expect.objectContaining({
+        jobId: 'job-1',
+        userId: 'user-1',
+        documentId: 'doc-1',
+        event: 'material.generated',
+        status: 'succeeded',
+        filename: 'doc-1.pdf',
+        fileType: 'application/pdf',
+        extractedChars: 0,
+      }),
+    );
     expect(ds.transaction).toHaveBeenCalledTimes(1);
-    expect(em.findOne).toHaveBeenCalledTimes(1);
-    expect(em.save).toHaveBeenCalledTimes(5);
+    expect(em.findOne).toHaveBeenCalledTimes(2);
+    expect(em.save).toHaveBeenCalledTimes(3);
   });
 });
