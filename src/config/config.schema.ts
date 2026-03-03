@@ -21,7 +21,9 @@ const envBoolean = z.preprocess((value) => {
 }, z.boolean());
 
 export const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DB_HOST: z.string().min(1, 'DB_HOST is required'),
   DB_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
@@ -29,6 +31,19 @@ export const envSchema = z.object({
   DB_PASS: z.string().default(''),
   DB_NAME: z.string().min(1, 'DB_NAME is required'),
   DB_SYNC: envBoolean.default(false),
+  REDIS_ENABLED: envBoolean.default(false),
+  REDIS_HOST: z.string().default('127.0.0.1'),
+  REDIS_PORT: z.coerce.number().int().min(1).max(65535).default(6379),
+  REDIS_USER: z.string().default(''),
+  REDIS_PASS: z.string().default(''),
+  REDIS_DB: z.coerce.number().int().min(0).default(0),
+  REDIS_KEY_PREFIX: z.string().default('rtm:mcp:'),
+  REDIS_LOCK_TTL_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(300000)
+    .default(15000),
 });
 
 export type Env = z.infer<typeof envSchema>;

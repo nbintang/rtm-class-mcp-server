@@ -9,7 +9,9 @@ describe('InsertMcqTool', () => {
 
     const em = {
       findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn((_entity, data) => data),
+      create: jest.fn(
+        (_entity: unknown, data: Record<string, unknown>) => data,
+      ),
       save: jest
         .fn()
         .mockResolvedValueOnce(job)
@@ -18,15 +20,28 @@ describe('InsertMcqTool', () => {
     };
 
     const ds = {
-      transaction: jest.fn(async (cb: (arg0: typeof em) => unknown) => cb(em)),
+      transaction: jest.fn((cb: (arg0: typeof em) => unknown) =>
+        Promise.resolve(cb(em)),
+      ),
     };
     const logger = {
       log: jest.fn(),
       error: jest.fn(),
       warn: jest.fn(),
     };
+    const config = { redisLockTtlMs: 15000 };
+    const redis = {
+      isEnabled: jest.fn().mockReturnValue(false),
+      acquireLock: jest.fn(),
+      releaseLock: jest.fn(),
+    };
 
-    const tool = new InsertMcqTool(ds as never, logger as never);
+    const tool = new InsertMcqTool(
+      ds as never,
+      config as never,
+      redis as never,
+      logger as never,
+    );
 
     const result = await tool.run({
       job_id: 'job-1',
@@ -71,5 +86,6 @@ describe('InsertMcqTool', () => {
     expect(ds.transaction).toHaveBeenCalledTimes(1);
     expect(em.findOne).toHaveBeenCalledTimes(2);
     expect(em.save).toHaveBeenCalledTimes(3);
+    expect(redis.isEnabled).toHaveBeenCalledTimes(1);
   });
 });

@@ -42,6 +42,38 @@ export class AppConfigService {
     return this.config.db.sync;
   }
 
+  get redisEnabled(): boolean {
+    return this.config.redis.enabled;
+  }
+
+  get redisHost(): string {
+    return this.config.redis.host;
+  }
+
+  get redisPort(): number {
+    return this.config.redis.port;
+  }
+
+  get redisUser(): string {
+    return this.config.redis.user;
+  }
+
+  get redisPass(): string {
+    return this.config.redis.pass;
+  }
+
+  get redisDb(): number {
+    return this.config.redis.db;
+  }
+
+  get redisKeyPrefix(): string {
+    return this.config.redis.keyPrefix;
+  }
+
+  get redisLockTtlMs(): number {
+    return this.config.redis.lockTtlMs;
+  }
+
   getTypeOrmOptions(): TypeOrmModuleOptions {
     return {
       type: 'postgres',

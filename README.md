@@ -29,6 +29,7 @@ Main write tables:
 - Fastify (`@nestjs/platform-fastify`)
 - `@rekog/mcp-nest` + `@modelcontextprotocol/sdk`
 - PostgreSQL + TypeORM
+- Redis (optional distributed lock for insert idempotency)
 - Zod
 - Winston (`nest-winston`)
 - Jest
@@ -95,6 +96,14 @@ Server will listen on `http://localhost:3030` when `PORT=3030`.
 | `DB_PASS` | No | `""` | PostgreSQL password. |
 | `DB_NAME` | Yes | - | PostgreSQL database name. |
 | `DB_SYNC` | No | `false` | TypeORM synchronize mode. Keep `false` in normal environments. |
+| `REDIS_ENABLED` | No | `false` | Enable Redis connection and distributed insert locks. |
+| `REDIS_HOST` | No | `127.0.0.1` | Redis host. |
+| `REDIS_PORT` | No | `6379` | Redis port. |
+| `REDIS_USER` | No | `""` | Redis ACL username. |
+| `REDIS_PASS` | No | `""` | Redis password. |
+| `REDIS_DB` | No | `0` | Redis database index. |
+| `REDIS_KEY_PREFIX` | No | `rtm:mcp:` | Prefix for all Redis keys. |
+| `REDIS_LOCK_TTL_MS` | No | `15000` | Lock TTL (ms) for insert tool execution. |
 | `PY_AI_BASE_URL` | No | - | Present in `.env.example` but currently not used in application code. |
 
 Example:
@@ -110,7 +119,18 @@ DB_USER=postgres
 DB_PASS=postgres
 DB_NAME=rtm
 DB_SYNC=false
+
+REDIS_ENABLED=false
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_USER=
+REDIS_PASS=
+REDIS_DB=0
+REDIS_KEY_PREFIX=rtm:mcp:
+REDIS_LOCK_TTL_MS=15000
 ```
+
+When `REDIS_ENABLED=true`, `insert_mcq`, `insert_essay`, and `insert_summary` use a distributed lock per `job_id + document_id` to reduce duplicate concurrent writes across multiple app instances.
 
 ## Run Commands
 

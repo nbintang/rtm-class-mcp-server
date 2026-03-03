@@ -15,6 +15,16 @@ const appConfig = registerAs('app', () => {
       name: env.DB_NAME,
       sync: env.DB_SYNC,
     },
+    redis: {
+      enabled: env.REDIS_ENABLED,
+      host: env.REDIS_HOST,
+      port: env.REDIS_PORT,
+      user: env.REDIS_USER,
+      pass: env.REDIS_PASS,
+      db: env.REDIS_DB,
+      keyPrefix: env.REDIS_KEY_PREFIX,
+      lockTtlMs: env.REDIS_LOCK_TTL_MS,
+    },
   };
 });
 
