@@ -82,7 +82,8 @@ export class AppConfigService {
       username: this.dbUser,
       password: this.dbPass,
       database: this.dbName,
-      synchronize: this.dbSync,
+      synchronize: false,
+      migrationsRun: false, // <- penting
       autoLoadEntities: true,
       logging: true,
     };

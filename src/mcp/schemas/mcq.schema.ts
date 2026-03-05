@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { z } from 'zod';
+import { AIJobStatus } from '../entities/ai-job.enums';
 
 const McqQuestionSchema = z.object({
   question: z.string().min(1),
@@ -9,8 +10,10 @@ const McqQuestionSchema = z.object({
 
 export const InsertMcqSchema = z.object({
   job_id: z.string().min(1),
-  user_id: z.string().min(1),
-  document_id: z.string().min(1),
+  requested_by_id: z.string().min(1),
+  material_id: z.string().min(1),
+  status: z.enum(Object.values(AIJobStatus)).optional(),
+  parameters: z.record(z.string(), z.unknown()).optional(),
   mcq_quiz: z.object({
     questions: z.array(McqQuestionSchema).min(1).max(20),
   }),

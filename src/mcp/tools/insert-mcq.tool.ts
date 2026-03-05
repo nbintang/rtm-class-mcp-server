@@ -6,9 +6,9 @@ import { AppConfigService } from '../../config/config.service';
 import { RedisService } from '../../redis/redis.service';
 
 import { InsertMcqSchema, type InsertMcqT } from '../schemas/mcq.schema';
-import { GenerationJob } from '../entities/generation-job.entity';
-import { McqQuiz } from '../entities/mcp-quiz.entity';
-import { McqQuestion } from '../entities/mcq-question.entity';
+import { AiJobEntity } from '../entities/ai-job.entity';
+import { AiOutputEntity } from '../entities/ai-output.entity';
+import { AIJobStatus } from '../entities/ai-job.enums';
 
 @Injectable()
 export class InsertMcqTool {
@@ -22,18 +22,25 @@ export class InsertMcqTool {
 
   @Tool({
     name: 'insert_mcq',
-    description: 'Insert MCQ quiz ke DB (minimal payload).',
+    description: 'Insert hasil MCQ ke AIOutput (berdasarkan AIJob).',
     parameters: InsertMcqSchema,
     annotations: { destructiveHint: true },
   })
   async run(args: InsertMcqT) {
-    const { job_id, user_id, document_id, mcq_quiz } = args;
-    const lockKey = `lock:insert_mcq:${job_id}:${document_id}`;
+    const { job_id, mcq_quiz } = args;
+    const requestedById = args.requested_by_id;
+    const materialId = args.material_id;
+
+    if (!requestedById || !materialId) {
+      throw new Error('requested_by_id dan material_id wajib diisi');
+    }
+
+    const lockKey = `lock:insert_mcq:${job_id}:${materialId}`;
     let lockToken: string | null = null;
     let lockAcquireErrored = false;
 
     this.logger.log(
-      `insert_mcq started job_id=${job_id} user_id=${user_id} document_id=${document_id} questions=${mcq_quiz.questions.length}`,
+      `insert_mcq started job_id=${job_id} requested_by_id=${requestedById} material_id=${materialId} questions=${mcq_quiz.questions.length}`,
       InsertMcqTool.name,
     );
 
@@ -55,101 +62,129 @@ export class InsertMcqTool {
         }
 
         if (!lockToken && !lockAcquireErrored) {
-          const existingJob = await this.ds
-            .getRepository(GenerationJob)
-            .findOne({ where: { jobId: job_id } });
-          if (existingJob) {
-            const existingQuiz = await this.ds.getRepository(McqQuiz).findOne({
-              where: {
-                job: { id: existingJob.id },
-                documentId: document_id,
-              },
-              relations: ['job'],
+          const existingJob = await this.ds.getRepository(AiJobEntity).findOne({
+            where: {
+              id: job_id,
+            },
+          });
+
+          if (!existingJob) {
+            throw new Error('AIJob not found');
+          }
+
+          if (
+            existingJob.requestedById !== requestedById ||
+            existingJob.materialId !== materialId
+          ) {
+            throw new Error('AIJob does not match requested_by_id/material_id');
+          }
+
+          const existingOutput = await this.ds
+            .getRepository(AiOutputEntity)
+            .findOne({
+              where: { jobId: existingJob.id },
             });
 
-            if (existingQuiz) {
-              return {
-                jobId: existingJob.id,
-                mcqQuizId: existingQuiz.id,
-                questionsInserted: 0,
-                note: 'quiz already exists (lock contention no-op)',
-              };
-            }
+          if (existingOutput) {
+            const existingQuestions = (existingOutput.content as {
+              mcq_quiz?: { questions?: unknown[] };
+            }).mcq_quiz?.questions;
+
+            return {
+              jobId: existingJob.id,
+              aiOutputId: existingOutput.id,
+              questionsInserted: Array.isArray(existingQuestions)
+                ? existingQuestions.length
+                : 0,
+              note: 'output already exists (lock contention no-op)',
+            };
           }
 
           throw new Error(
-            `insert_mcq already processing for job_id=${job_id} document_id=${document_id}`,
+            `insert_mcq already processing for job_id=${job_id} material_id=${materialId}`,
           );
         }
       }
 
       const saved = await this.ds.transaction(async (em) => {
-        // 1) Pastikan job record ada (atau buat stub minimal)
-        let job = await em.findOne(GenerationJob, { where: { jobId: job_id } });
-
-        if (!job) {
-          // Stub minimal (kalau kamu mau strict: throw error saja)
-          job = em.create(GenerationJob, {
-            jobId: job_id,
-            userId: user_id,
-            documentId: document_id,
-            // event/status/material/finishedAt/attempt TIDAK ADA di schema minimal
-            // set default/nullable di entity, atau isi nilai aman:
-            event: 'material.generated',
-            status: 'succeeded',
-            filename: `${document_id}.pdf`,
-            fileType: 'application/pdf',
-            extractedChars: 0,
-          });
-          job = await em.save(job);
-        }
-
-        // 2) Idempotency sederhana:
-        //    kalau sudah pernah insert quiz untuk job+document, jangan dobel
-        const existingQuiz = await em.findOne(McqQuiz, {
-          where: { job: { id: job.id }, documentId: document_id },
-          relations: ['job'],
+        const job = await em.findOne(AiJobEntity, {
+          where: {
+            id: job_id,
+          },
         });
 
-        if (existingQuiz) {
-          // Optional: juga cek jumlah questions yg ada, dll
+        if (!job) {
+          throw new Error('AIJob not found');
+        }
+
+        if (job.requestedById !== requestedById || job.materialId !== materialId) {
+          throw new Error('AIJob does not match requested_by_id/material_id');
+        }
+
+        const existingOutput = await em.findOne(AiOutputEntity, {
+          where: { jobId: job.id },
+        });
+
+        if (existingOutput) {
+          const existingQuestions = (existingOutput.content as {
+            mcq_quiz?: { questions?: unknown[] };
+          }).mcq_quiz?.questions;
+
+          if (job.status !== AIJobStatus.SUCCEEDED || !job.completedAt) {
+            await em.update(
+              AiJobEntity,
+              { id: job.id },
+              {
+                status: AIJobStatus.SUCCEEDED,
+                completedAt: new Date(),
+                lastError: null,
+              },
+            );
+          }
+
           return {
             jobId: job.id,
-            mcqQuizId: existingQuiz.id,
-            questionsInserted: 0,
-            note: 'quiz already exists (idempotent no-op)',
+            aiOutputId: existingOutput.id,
+            questionsInserted: Array.isArray(existingQuestions)
+              ? existingQuestions.length
+              : 0,
+            note: 'output already exists (idempotent no-op)',
           };
         }
 
-        // 3) Insert quiz
-        const quiz = em.create(McqQuiz, {
-          job,
-          userId: user_id,
-          documentId: document_id,
-        });
-        const savedQuiz = await em.save(quiz);
-
-        // 4) Insert questions
-        const questions = mcq_quiz.questions.map((q) =>
-          em.create(McqQuestion, {
-            quiz: savedQuiz,
-            question: q.question,
-            options: q.options,
-            correctAnswer: q.correct_answer,
-            explanation: q.explanation,
+        const savedOutput = await em.save(
+          em.create(AiOutputEntity, {
+            materialId: job.materialId,
+            jobId: job.id,
+            type: job.type,
+            content: {
+              mcq_quiz,
+            },
+            editedContent: null,
+            isPublished: false,
+            publishedAt: null,
           }),
         );
-        await em.save(questions);
+
+        await em.update(
+          AiJobEntity,
+          { id: job.id },
+          {
+            status: AIJobStatus.SUCCEEDED,
+            completedAt: new Date(),
+            lastError: null,
+          },
+        );
 
         return {
           jobId: job.id,
-          mcqQuizId: savedQuiz.id,
-          questionsInserted: questions.length,
+          aiOutputId: savedOutput.id,
+          questionsInserted: mcq_quiz.questions.length,
         };
       });
 
       this.logger.log(
-        `insert_mcq success job_id=${job_id} mcq_quiz_id=${saved.mcqQuizId} questions=${saved.questionsInserted}`,
+        `insert_mcq success job_id=${job_id} ai_output_id=${saved.aiOutputId} questions=${saved.questionsInserted}`,
         InsertMcqTool.name,
       );
       return saved;

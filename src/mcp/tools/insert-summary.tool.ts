@@ -8,10 +8,9 @@ import {
   InsertSummarySchema,
   type InsertSummaryT,
 } from '../schemas/summary.schema';
-import { GenerationJob } from '../entities/generation-job.entity';
-import { GenerationSource } from '../entities/generation-source.entity';
-import { GenerationWarning } from '../entities/generation-warning.entity';
-import { Summary } from '../entities/summary.entity';
+import { AiJobEntity } from '../entities/ai-job.entity';
+import { AiOutputEntity } from '../entities/ai-output.entity';
+import { AIJobStatus } from '../entities/ai-job.enums';
 
 @Injectable()
 export class InsertSummaryTool {
@@ -25,36 +24,25 @@ export class InsertSummaryTool {
 
   @Tool({
     name: 'insert_summary',
-    description: 'Insert summary ke DB (minimal payload).',
+    description: 'Insert hasil summary ke AIOutput (berdasarkan AIJob).',
     parameters: InsertSummarySchema,
     annotations: { destructiveHint: true },
   })
   async run(args: InsertSummaryT) {
-    const {
-      event,
-      status,
-      job_id,
-      user_id,
-      document_id,
-      summary,
-      filename,
-      file_type,
-      extracted_chars,
-      sources,
-      warnings,
-    } = args;
+    const { job_id, summary, sources, warnings } = args;
+    const requestedById = args.requested_by_id;
+    const materialId = args.material_id;
 
-    const effectiveEvent = event ?? 'material.generated';
-    const effectiveStatus = status ?? 'succeeded';
-    const effectiveFilename = filename ?? `${document_id}.pdf`;
-    const effectiveFileType = file_type ?? 'application/pdf';
-    const effectiveExtractedChars = extracted_chars ?? 0;
-    const lockKey = `lock:insert_summary:${job_id}:${document_id}`;
+    if (!requestedById || !materialId) {
+      throw new Error('requested_by_id dan material_id wajib diisi');
+    }
+
+    const lockKey = `lock:insert_summary:${job_id}:${materialId}`;
     let lockToken: string | null = null;
     let lockAcquireErrored = false;
 
     this.logger.log(
-      `insert_summary started job_id=${job_id} user_id=${user_id} document_id=${document_id}`,
+      `insert_summary started job_id=${job_id} requested_by_id=${requestedById} material_id=${materialId}`,
       InsertSummaryTool.name,
     );
 
@@ -76,108 +64,131 @@ export class InsertSummaryTool {
         }
 
         if (!lockToken && !lockAcquireErrored) {
-          const existingJob = await this.ds
-            .getRepository(GenerationJob)
-            .findOne({ where: { jobId: job_id } });
-          if (existingJob) {
-            const existingSummary = await this.ds
-              .getRepository(Summary)
-              .findOne({
-                where: {
-                  job: { id: existingJob.id },
-                  documentId: document_id,
-                },
-                relations: ['job'],
-              });
+          const existingJob = await this.ds.getRepository(AiJobEntity).findOne({
+            where: {
+              id: job_id,
+            },
+          });
 
-            if (existingSummary) {
-              return {
-                jobId: existingJob.id,
-                summaryId: existingSummary.id,
-                keyPoints: existingSummary.keyPoints.length,
-                note: 'summary already exists (lock contention no-op)',
-              };
-            }
+          if (!existingJob) {
+            throw new Error('AIJob not found');
+          }
+
+          if (
+            existingJob.requestedById !== requestedById ||
+            existingJob.materialId !== materialId
+          ) {
+            throw new Error('AIJob does not match requested_by_id/material_id');
+          }
+
+          const existingOutput = await this.ds
+            .getRepository(AiOutputEntity)
+            .findOne({
+              where: { jobId: existingJob.id },
+            });
+
+          if (existingOutput) {
+            return {
+              jobId: existingJob.id,
+              aiOutputId: existingOutput.id,
+              keyPoints: Array.isArray(
+                (existingOutput.content as { summary?: { key_points?: unknown } })
+                  .summary?.key_points,
+              )
+                ? ((existingOutput.content as { summary: { key_points: unknown[] } })
+                    .summary.key_points.length ?? 0)
+                : 0,
+              note: 'output already exists (lock contention no-op)',
+            };
           }
 
           throw new Error(
-            `insert_summary already processing for job_id=${job_id} document_id=${document_id}`,
+            `insert_summary already processing for job_id=${job_id} material_id=${materialId}`,
           );
         }
       }
 
       const saved = await this.ds.transaction(async (em) => {
-        let job = await em.findOne(GenerationJob, { where: { jobId: job_id } });
-
-        if (!job) {
-          job = em.create(GenerationJob, {
-            jobId: job_id,
-            event: effectiveEvent,
-            status: effectiveStatus,
-            userId: user_id,
-            documentId: document_id,
-            filename: effectiveFilename,
-            fileType: effectiveFileType,
-            extractedChars: effectiveExtractedChars,
-          });
-          job = await em.save(job);
-        }
-
-        const existingSummary = await em.findOne(Summary, {
-          where: { job: { id: job.id }, documentId: document_id },
-          relations: ['job'],
+        const job = await em.findOne(AiJobEntity, {
+          where: {
+            id: job_id,
+          },
         });
 
-        if (existingSummary) {
+        if (!job) {
+          throw new Error('AIJob not found');
+        }
+
+        if (job.requestedById !== requestedById || job.materialId !== materialId) {
+          throw new Error('AIJob does not match requested_by_id/material_id');
+        }
+
+        const existingOutput = await em.findOne(AiOutputEntity, {
+          where: { jobId: job.id },
+        });
+
+        if (existingOutput) {
+          const existingKeyPoints = (existingOutput.content as {
+            summary?: { key_points?: unknown[] };
+          }).summary?.key_points;
+
+          if (job.status !== AIJobStatus.SUCCEEDED || !job.completedAt) {
+            await em.update(
+              AiJobEntity,
+              { id: job.id },
+              {
+                status: AIJobStatus.SUCCEEDED,
+                completedAt: new Date(),
+                lastError: null,
+              },
+            );
+          }
+
           return {
             jobId: job.id,
-            summaryId: existingSummary.id,
-            keyPoints: existingSummary.keyPoints.length,
-            note: 'summary already exists (idempotent no-op)',
+            aiOutputId: existingOutput.id,
+            keyPoints: Array.isArray(existingKeyPoints)
+              ? existingKeyPoints.length
+              : 0,
+            note: 'output already exists (idempotent no-op)',
           };
         }
 
-        if (sources?.length) {
-          await em.save(
-            sources.map((s) =>
-              em.create(GenerationSource, {
-                job,
-                chunkId: s.chunk_id,
-                sourceId: s.source_id,
-                excerpt: s.excerpt,
-              }),
-            ),
-          );
-        }
-
-        if (warnings?.length) {
-          await em.save(
-            warnings.map((w) =>
-              em.create(GenerationWarning, { job, message: w }),
-            ),
-          );
-        }
-
-        const savedSummary = await em.save(
-          em.create(Summary, {
-            job,
-            userId: user_id,
-            documentId: document_id,
-            title: summary.title,
-            overview: summary.overview,
-            keyPoints: summary.key_points,
+        const savedOutput = await em.save(
+          em.create(AiOutputEntity, {
+            materialId: job.materialId,
+            jobId: job.id,
+            type: job.type,
+            content: {
+              summary,
+              sources: sources ?? [],
+              warnings: warnings ?? [],
+            },
+            editedContent: null,
+            isPublished: false,
+            publishedAt: null,
           }),
+        );
+
+        await em.update(
+          AiJobEntity,
+          { id: job.id },
+          {
+            status: AIJobStatus.SUCCEEDED,
+            completedAt: new Date(),
+            lastError: null,
+          },
         );
 
         return {
           jobId: job.id,
-          summaryId: savedSummary.id,
-          keyPoints: savedSummary.keyPoints.length,
+          aiOutputId: savedOutput.id,
+          keyPoints: summary.key_points.length,
         };
       });
 
       this.logger.log(
-        `insert_summary success job_id=${job_id} summary_id=${saved.summaryId} key_points=${saved.keyPoints}`,
+        `insert_summary success job_id=${job_id} ai_output_id=${saved.aiOutputId} key_points=${saved.keyPoints}`,
         InsertSummaryTool.name,
       );
       return saved;

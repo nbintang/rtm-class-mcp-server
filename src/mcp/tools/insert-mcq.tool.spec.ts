@@ -1,22 +1,29 @@
 import { InsertMcqTool } from './insert-mcq.tool';
-import { GenerationJob } from '../entities/generation-job.entity';
+import { AiOutputEntity } from '../entities/ai-output.entity';
+import { AIJobStatus, AIJobType } from '../entities/ai-job.enums';
 
 describe('InsertMcqTool', () => {
-  it('should insert job, quiz, and mcq questions', async () => {
-    const job = { id: 'job-db-id', jobId: 'job-1' };
-    const quiz = { id: 'quiz-1' };
-    const savedQuestions = [{ id: 'q1' }, { id: 'q2' }];
+  it('should insert AI output for an existing job and mark job as succeeded', async () => {
+    const job = {
+      id: 'job-db-id',
+      materialId: 'doc-1',
+      requestedById: 'user-1',
+      type: AIJobType.MCQ,
+      status: AIJobStatus.PROCESSING,
+      completedAt: null,
+    };
+    const output = { id: 'output-1' };
 
     const em = {
-      findOne: jest.fn().mockResolvedValue(null),
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(job)
+        .mockResolvedValueOnce(null),
       create: jest.fn(
         (_entity: unknown, data: Record<string, unknown>) => data,
       ),
-      save: jest
-        .fn()
-        .mockResolvedValueOnce(job)
-        .mockResolvedValueOnce(quiz)
-        .mockResolvedValueOnce(savedQuestions),
+      save: jest.fn().mockResolvedValueOnce(output),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     const ds = {
@@ -44,9 +51,9 @@ describe('InsertMcqTool', () => {
     );
 
     const result = await tool.run({
-      job_id: 'job-1',
-      user_id: 'user-1',
-      document_id: 'doc-1',
+      job_id: 'job-db-id',
+      requested_by_id: 'user-1',
+      material_id: 'doc-1',
       mcq_quiz: {
         questions: [
           {
@@ -67,25 +74,27 @@ describe('InsertMcqTool', () => {
 
     expect(result).toEqual({
       jobId: 'job-db-id',
-      mcqQuizId: 'quiz-1',
+      aiOutputId: 'output-1',
       questionsInserted: 2,
     });
     expect(em.create).toHaveBeenCalledWith(
-      GenerationJob,
+      AiOutputEntity,
       expect.objectContaining({
-        jobId: 'job-1',
-        userId: 'user-1',
-        documentId: 'doc-1',
-        event: 'material.generated',
-        status: 'succeeded',
-        filename: 'doc-1.pdf',
-        fileType: 'application/pdf',
-        extractedChars: 0,
+        materialId: 'doc-1',
+        type: AIJobType.MCQ,
+        jobId: 'job-db-id',
+      }),
+    );
+    expect(em.update).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: 'job-db-id' },
+      expect.objectContaining({
+        status: AIJobStatus.SUCCEEDED,
       }),
     );
     expect(ds.transaction).toHaveBeenCalledTimes(1);
     expect(em.findOne).toHaveBeenCalledTimes(2);
-    expect(em.save).toHaveBeenCalledTimes(3);
+    expect(em.save).toHaveBeenCalledTimes(1);
     expect(redis.isEnabled).toHaveBeenCalledTimes(1);
   });
 });
