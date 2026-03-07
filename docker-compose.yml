@@ -64,14 +64,14 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: rtm-class-postgres
+    container_name: rtm-class-mcp-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-rtm}
     ports:
-      - "${DOCKER_POSTGRES_PORT:-5433}:5432"
+      - "${DOCKER_POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -86,10 +86,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: rtm-class-redis
+    container_name: rtm-class-mcp-redis
     restart: unless-stopped
     ports:
-      - "${DOCKER_REDIS_PORT:-6380}:6379"
+      - "${DOCKER_REDIS_PORT:-6381}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
