@@ -1,0 +1,100 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rtm-class-mcp-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run start:prod
+    environment:
+      NODE_ENV: production
+      PORT: 3030
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASS: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-rtm}
+      DB_SYNC: "false"
+      REDIS_ENABLED: ${DOCKER_REDIS_ENABLED:-true}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USER: ""
+      REDIS_PASS: ""
+      REDIS_DB: "0"
+      REDIS_KEY_PREFIX: "rtm:mcp:"
+      REDIS_LOCK_TTL_MS: "15000"
+    ports:
+      - "${DOCKER_APP_PORT:-3030}:3030"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3030/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run migration:run
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASS: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-rtm}
+      DB_SYNC: "false"
+      REDIS_ENABLED: "false"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rtm-class-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-rtm}
+    ports:
+      - "${DOCKER_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-rtm}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: rtm-class-redis
+    restart: unless-stopped
+    ports:
+      - "${DOCKER_REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
