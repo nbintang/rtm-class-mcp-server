@@ -12,14 +12,14 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3030
-      DB_HOST: ${DB_HOST:-host.docker.internal}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASS: ${DB_PASS:-postgres}
-      DB_NAME: ${DB_NAME:-rtm}
-      DB_SYNC: 'true'
-      DB_MIGRATIONS_RUN: 'false'
-      REDIS_ENABLED: ${DOCKER_REDIS_ENABLED:-true}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      DB_NAME: ${DB_NAME}
+      DB_SYNC: ${DB_SYNC}
+      DB_MIGRATIONS_RUN: ${DB_MIGRATIONS_RUN}
+      REDIS_ENABLED: ${REDIS_ENABLED:-false}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_USER: ''
