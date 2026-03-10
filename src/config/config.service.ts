@@ -87,7 +87,7 @@ export class AppConfigService {
       username: this.dbUser,
       password: this.dbPass,
       database: this.dbName,
-      synchronize: false,
+      synchronize: this.dbSync,
       migrations: [join(__dirname, '..', 'mcp', 'migrations', '*{.ts,.js}')],
       migrationsRun: this.dbMigrationsRun,
       autoLoadEntities: true,
