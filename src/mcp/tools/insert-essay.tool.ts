@@ -8,7 +8,7 @@ import { RedisService } from '../../redis/redis.service';
 import { InsertEssaySchema, type InsertEssayT } from '../schemas/essay.schema';
 import { AiJobEntity } from '../entities/ai-job.entity';
 import { AiOutputEntity } from '../entities/ai-output.entity';
-import { AIJobStatus } from '../entities/ai-job.enums';
+import { AIJobStatus, AIJobType } from '../entities/ai-job.enums';
 
 @Injectable()
 export class InsertEssayTool {
@@ -94,9 +94,11 @@ export class InsertEssayTool {
             .findOne({ where: { jobId: existingJob.id } });
 
           if (existingOutput) {
-            const existingQuestions = (existingOutput.content as {
-              essay_quiz?: { questions?: unknown[] };
-            }).essay_quiz?.questions;
+            const existingQuestions = (
+              existingOutput.content as {
+                essay_quiz?: { questions?: unknown[] };
+              }
+            ).essay_quiz?.questions;
 
             return {
               jobId: existingJob.id,
@@ -115,26 +117,31 @@ export class InsertEssayTool {
       }
 
       const saved = await this.ds.transaction(async (em) => {
-        const jobById = await em.findOne(AiJobEntity, {
-          where: {
-            id: job_id,
-          },
+        let job = await em.findOne(AiJobEntity, {
+          where: [{ id: job_id }, { externalJobId: job_id }],
         });
-        const job =
-          jobById ??
-          (await em.findOne(AiJobEntity, {
-            where: {
-              externalJobId: job_id,
-            },
-          }));
 
         if (!job) {
-          throw new Error(
-            `AIJob not found for job_id=${job_id} (checked id and externalJobId)`,
+          this.logger.log(
+            `AIJob not found, auto-creating for job_id=${job_id}`,
+            InsertEssayTool.name,
+          );
+          job = await em.save(
+            em.create(AiJobEntity, {
+              id: job_id.length === 36 ? job_id : undefined,
+              externalJobId: job_id,
+              materialId,
+              requestedById,
+              type: AIJobType.ESSAY,
+              status: AIJobStatus.PROCESSING,
+            }),
           );
         }
 
-        if (job.requestedById !== requestedById || job.materialId !== materialId) {
+        if (
+          job.requestedById !== requestedById ||
+          job.materialId !== materialId
+        ) {
           throw new Error('AIJob does not match requested_by_id/material_id');
         }
 
@@ -143,9 +150,11 @@ export class InsertEssayTool {
         });
 
         if (existingOutput) {
-          const existingQuestions = (existingOutput.content as {
-            essay_quiz?: { questions?: unknown[] };
-          }).essay_quiz?.questions;
+          const existingQuestions = (
+            existingOutput.content as {
+              essay_quiz?: { questions?: unknown[] };
+            }
+          ).essay_quiz?.questions;
 
           if (job.status !== AIJobStatus.SUCCEEDED || !job.completedAt) {
             await em.update(
