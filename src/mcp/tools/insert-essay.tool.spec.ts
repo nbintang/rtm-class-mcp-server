@@ -87,4 +87,75 @@ describe('InsertEssayTool', () => {
     expect(em.save).toHaveBeenCalledTimes(1);
     expect(redis.isEnabled).toHaveBeenCalledTimes(1);
   });
+
+  it('should resolve job by externalJobId when job_id is not AIJob.id', async () => {
+    const job = {
+      id: 'job-db-id',
+      externalJobId: 'ext-job-1',
+      materialId: 'doc-1',
+      requestedById: 'user-1',
+      type: AIJobType.ESSAY,
+      status: AIJobStatus.PROCESSING,
+      completedAt: null,
+    };
+    const output = { id: 'essay-output-2' };
+
+    const em = {
+      findOne: jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(job)
+        .mockResolvedValueOnce(null),
+      create: jest.fn(
+        (_entity: unknown, data: Record<string, unknown>) => data,
+      ),
+      save: jest.fn().mockResolvedValueOnce(output),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+
+    const ds = {
+      transaction: jest.fn((cb: (arg0: typeof em) => unknown) =>
+        Promise.resolve(cb(em)),
+      ),
+    };
+    const logger = {
+      log: jest.fn(),
+      error: jest.fn(),
+      warn: jest.fn(),
+    };
+    const config = { redisLockTtlMs: 15000 };
+    const redis = {
+      isEnabled: jest.fn().mockReturnValue(false),
+      acquireLock: jest.fn(),
+      releaseLock: jest.fn(),
+    };
+
+    const tool = new InsertEssayTool(
+      ds as never,
+      config as never,
+      redis as never,
+      logger as never,
+    );
+
+    const result = await tool.run({
+      job_id: 'ext-job-1',
+      requested_by_id: 'user-1',
+      material_id: 'doc-1',
+      essay_quiz: {
+        questions: [{ question: 'Explain X', expected_points: '5' }],
+      },
+    });
+
+    expect(result).toEqual({
+      jobId: 'job-db-id',
+      aiOutputId: 'essay-output-2',
+      questionsInserted: 1,
+    });
+    expect(em.findOne).toHaveBeenNthCalledWith(1, expect.anything(), {
+      where: { id: 'ext-job-1' },
+    });
+    expect(em.findOne).toHaveBeenNthCalledWith(2, expect.anything(), {
+      where: { externalJobId: 'ext-job-1' },
+    });
+  });
 });

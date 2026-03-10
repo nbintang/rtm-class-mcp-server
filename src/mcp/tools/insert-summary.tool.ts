@@ -64,14 +64,24 @@ export class InsertSummaryTool {
         }
 
         if (!lockToken && !lockAcquireErrored) {
-          const existingJob = await this.ds.getRepository(AiJobEntity).findOne({
+          const repo = this.ds.getRepository(AiJobEntity);
+          const existingJobById = await repo.findOne({
             where: {
               id: job_id,
             },
           });
+          const existingJob =
+            existingJobById ??
+            (await repo.findOne({
+              where: {
+                externalJobId: job_id,
+              },
+            }));
 
           if (!existingJob) {
-            throw new Error('AIJob not found');
+            throw new Error(
+              `AIJob not found for job_id=${job_id} (checked id and externalJobId)`,
+            );
           }
 
           if (
@@ -109,14 +119,23 @@ export class InsertSummaryTool {
       }
 
       const saved = await this.ds.transaction(async (em) => {
-        const job = await em.findOne(AiJobEntity, {
+        const jobById = await em.findOne(AiJobEntity, {
           where: {
             id: job_id,
           },
         });
+        const job =
+          jobById ??
+          (await em.findOne(AiJobEntity, {
+            where: {
+              externalJobId: job_id,
+            },
+          }));
 
         if (!job) {
-          throw new Error('AIJob not found');
+          throw new Error(
+            `AIJob not found for job_id=${job_id} (checked id and externalJobId)`,
+          );
         }
 
         if (job.requestedById !== requestedById || job.materialId !== materialId) {
