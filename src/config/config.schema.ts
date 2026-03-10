@@ -31,6 +31,7 @@ export const envSchema = z.object({
   DB_PASS: z.string().default(''),
   DB_NAME: z.string().min(1, 'DB_NAME is required'),
   DB_SYNC: envBoolean.default(false),
+  DB_MIGRATIONS_RUN: envBoolean.default(true),
   REDIS_ENABLED: envBoolean.default(false),
   REDIS_HOST: z.string().default('127.0.0.1'),
   REDIS_PORT: z.coerce.number().int().min(1).max(65535).default(6379),

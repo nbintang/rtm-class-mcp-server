@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { join } from 'path';
 import appConfig from './config';
 
 @Injectable()
@@ -40,6 +41,10 @@ export class AppConfigService {
 
   get dbSync(): boolean {
     return this.config.db.sync;
+  }
+
+  get dbMigrationsRun(): boolean {
+    return this.config.db.migrationsRun;
   }
 
   get redisEnabled(): boolean {
@@ -83,7 +88,8 @@ export class AppConfigService {
       password: this.dbPass,
       database: this.dbName,
       synchronize: false,
-      migrationsRun: false, // <- penting
+      migrations: [join(__dirname, '..', 'mcp', 'migrations', '*{.ts,.js}')],
+      migrationsRun: this.dbMigrationsRun,
       autoLoadEntities: true,
       logging: true,
     };

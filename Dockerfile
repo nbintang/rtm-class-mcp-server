@@ -19,4 +19,4 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 EXPOSE 3030
 
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/main.js"]

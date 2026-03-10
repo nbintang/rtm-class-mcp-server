@@ -14,6 +14,7 @@ const appConfig = registerAs('app', () => {
       pass: env.DB_PASS,
       name: env.DB_NAME,
       sync: env.DB_SYNC,
+      migrationsRun: env.DB_MIGRATIONS_RUN,
     },
     redis: {
       enabled: env.REDIS_ENABLED,
