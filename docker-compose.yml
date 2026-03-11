@@ -8,17 +8,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: npm run start:prod
     environment:
       NODE_ENV: production
       PORT: 3030
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USER: ${DB_USER}
-      DB_PASS: ${DB_PASS}
-      DB_NAME: ${DB_NAME}
-      DB_SYNC: ${DB_SYNC}
-      DB_MIGRATIONS_RUN: ${DB_MIGRATIONS_RUN}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:-}
+      DB_NAME: ${DB_NAME:-rtm_db}
       REDIS_ENABLED: ${REDIS_ENABLED:-false}
       REDIS_HOST: redis
       REDIS_PORT: 6379
