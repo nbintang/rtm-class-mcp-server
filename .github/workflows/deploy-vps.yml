@@ -64,41 +64,7 @@ jobs:
           fi
 
           cd "${APP_DIR}"
-          repair_repo_permissions() {
-            echo "Repairing repository ownership/permissions..."
-            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-              sudo chown -R "$(id -un):$(id -gn)" "${APP_DIR}"
-              sudo find "${APP_DIR}/.git" -type d -exec chmod u+rwx {} +
-              sudo find "${APP_DIR}/.git" -type f -exec chmod u+rw {} +
-            else
-              echo "Cannot auto-repair: sudo without password is unavailable."
-              ls -ld "${APP_DIR}" "${APP_DIR}/.git" "${APP_DIR}/.git/objects" "${APP_DIR}/.git/objects/pack" || true
-              exit 1
-            fi
-          }
-
-          can_write_git_objects() {
-            mkdir -p "${APP_DIR}/.git/objects/pack"
-            local probe_file="${APP_DIR}/.git/objects/pack/.write_probe_$$"
-            if ! ( umask 077 && : > "${probe_file}" ) 2>/dev/null; then
-              return 1
-            fi
-            rm -f "${probe_file}"
-            return 0
-          }
-
-          if ! can_write_git_objects; then
-            echo "Git object database is not writable for user $(id -un)."
-            repair_repo_permissions
-            can_write_git_objects
-          fi
-
-          if ! git fetch origin "${BRANCH}" --prune; then
-            echo "git fetch failed. Retrying once after permission repair..."
-            repair_repo_permissions
-            git fetch origin "${BRANCH}" --prune
-          fi
-
+          git fetch origin "${BRANCH}" --prune
           git reset --hard "origin/${BRANCH}"
 
           docker compose up -d --build --remove-orphans
