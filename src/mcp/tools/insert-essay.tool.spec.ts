@@ -1,6 +1,5 @@
 import { InsertEssayTool } from './insert-essay.tool';
-import { AiOutputEntity } from '../entities/ai-output.entity';
-import { AIJobStatus, AIJobType } from '../entities/ai-job.enums';
+import { AIJobStatus, AIJobType } from '@prisma/client';
 
 describe('InsertEssayTool', () => {
   it('should insert AI output for an existing job and mark job as succeeded', async () => {
@@ -14,23 +13,32 @@ describe('InsertEssayTool', () => {
     };
     const output = { id: 'essay-output-1' };
 
-    const em = {
-      findOne: jest
-        .fn()
-        .mockResolvedValueOnce(job)
-        .mockResolvedValueOnce(null),
-      create: jest.fn(
-        (_entity: unknown, data: Record<string, unknown>) => data,
-      ),
-      save: jest.fn().mockResolvedValueOnce(output),
-      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    const tx = {
+      aiJob: {
+        findUnique: jest.fn().mockResolvedValue(job),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'job-db-id' }),
+      },
+      aiOutput: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(output),
+      },
     };
 
-    const ds = {
-      transaction: jest.fn((cb: (arg0: typeof em) => unknown) =>
-        Promise.resolve(cb(em)),
+    const prisma = {
+      $transaction: jest.fn((cb: (arg0: typeof tx) => unknown) =>
+        Promise.resolve(cb(tx)),
       ),
+      aiJob: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+      },
+      aiOutput: {
+        findUnique: jest.fn(),
+      },
     };
+
     const logger = {
       log: jest.fn(),
       error: jest.fn(),
@@ -44,7 +52,7 @@ describe('InsertEssayTool', () => {
     };
 
     const tool = new InsertEssayTool(
-      ds as never,
+      prisma as never,
       config as never,
       redis as never,
       logger as never,
@@ -67,24 +75,26 @@ describe('InsertEssayTool', () => {
       aiOutputId: 'essay-output-1',
       questionsInserted: 2,
     });
-    expect(em.create).toHaveBeenCalledWith(
-      AiOutputEntity,
+    expect(tx.aiOutput.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        materialId: 'doc-1',
-        type: AIJobType.ESSAY,
-        jobId: 'job-db-id',
+        data: expect.objectContaining({
+          materialId: 'doc-1',
+          type: AIJobType.ESSAY,
+          jobId: 'job-db-id',
+        }),
       }),
     );
-    expect(em.update).toHaveBeenCalledWith(
-      expect.anything(),
-      { id: 'job-db-id' },
+    expect(tx.aiJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: AIJobStatus.SUCCEEDED,
+        where: { id: 'job-db-id' },
+        data: expect.objectContaining({
+          status: AIJobStatus.SUCCEEDED,
+        }),
       }),
     );
-    expect(ds.transaction).toHaveBeenCalledTimes(1);
-    expect(em.findOne).toHaveBeenCalledTimes(2);
-    expect(em.save).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.aiJob.findUnique).toHaveBeenCalledTimes(1);
+    expect(tx.aiOutput.findUnique).toHaveBeenCalledTimes(1);
     expect(redis.isEnabled).toHaveBeenCalledTimes(1);
   });
 
@@ -100,24 +110,32 @@ describe('InsertEssayTool', () => {
     };
     const output = { id: 'essay-output-2' };
 
-    const em = {
-      findOne: jest
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(job)
-        .mockResolvedValueOnce(null),
-      create: jest.fn(
-        (_entity: unknown, data: Record<string, unknown>) => data,
-      ),
-      save: jest.fn().mockResolvedValueOnce(output),
-      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    const tx = {
+      aiJob: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(job),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'job-db-id' }),
+      },
+      aiOutput: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(output),
+      },
     };
 
-    const ds = {
-      transaction: jest.fn((cb: (arg0: typeof em) => unknown) =>
-        Promise.resolve(cb(em)),
+    const prisma = {
+      $transaction: jest.fn((cb: (arg0: typeof tx) => unknown) =>
+        Promise.resolve(cb(tx)),
       ),
+      aiJob: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+      },
+      aiOutput: {
+        findUnique: jest.fn(),
+      },
     };
+
     const logger = {
       log: jest.fn(),
       error: jest.fn(),
@@ -131,7 +149,7 @@ describe('InsertEssayTool', () => {
     };
 
     const tool = new InsertEssayTool(
-      ds as never,
+      prisma as never,
       config as never,
       redis as never,
       logger as never,
@@ -151,10 +169,10 @@ describe('InsertEssayTool', () => {
       aiOutputId: 'essay-output-2',
       questionsInserted: 1,
     });
-    expect(em.findOne).toHaveBeenNthCalledWith(1, expect.anything(), {
+    expect(tx.aiJob.findUnique).toHaveBeenCalledWith({
       where: { id: 'ext-job-1' },
     });
-    expect(em.findOne).toHaveBeenNthCalledWith(2, expect.anything(), {
+    expect(tx.aiJob.findFirst).toHaveBeenCalledWith({
       where: { externalJobId: 'ext-job-1' },
     });
   });

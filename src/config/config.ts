@@ -8,13 +8,12 @@ const appConfig = registerAs('app', () => {
     nodeEnv: env.NODE_ENV,
     port: env.PORT,
     db: {
+      url: env.DATABASE_URL,
       host: env.DB_HOST,
       port: env.DB_PORT,
       user: env.DB_USER,
       pass: env.DB_PASS,
       name: env.DB_NAME,
-      sync: env.DB_SYNC,
-      migrationsRun: env.DB_MIGRATIONS_RUN,
     },
     redis: {
       enabled: env.REDIS_ENABLED,

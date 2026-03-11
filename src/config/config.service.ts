@@ -1,7 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { type ConfigType } from '@nestjs/config';
-import { TypeOrmModuleOptions } from '@nestjs/typeorm';
-import { join } from 'path';
 import appConfig from './config';
 
 @Injectable()
@@ -39,12 +37,8 @@ export class AppConfigService {
     return this.config.db.name;
   }
 
-  get dbSync(): boolean {
-    return this.config.db.sync;
-  }
-
-  get dbMigrationsRun(): boolean {
-    return this.config.db.migrationsRun;
+  get dbUrl(): string | undefined {
+    return this.config.db.url;
   }
 
   get redisEnabled(): boolean {
@@ -79,19 +73,13 @@ export class AppConfigService {
     return this.config.redis.lockTtlMs;
   }
 
-  getTypeOrmOptions(): TypeOrmModuleOptions {
-    return {
-      type: 'postgres',
-      host: this.dbHost,
-      port: this.dbPort,
-      username: this.dbUser,
-      password: this.dbPass,
-      database: this.dbName,
-      synchronize: this.dbSync,
-      migrations: [join(__dirname, '..', 'mcp', 'migrations', '*{.ts,.js}')],
-      migrationsRun: this.dbMigrationsRun,
-      autoLoadEntities: true,
-      logging: true,
-    };
+  get databaseUrl(): string {
+    if (this.dbUrl) {
+      return this.dbUrl;
+    }
+
+    const username = encodeURIComponent(this.dbUser);
+    const password = encodeURIComponent(this.dbPass ?? '');
+    return `postgresql://${username}:${password}@${this.dbHost}:${this.dbPort}/${this.dbName}`;
   }
 }

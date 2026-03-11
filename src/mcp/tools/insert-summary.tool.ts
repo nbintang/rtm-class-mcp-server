@@ -1,21 +1,23 @@
 import { Inject, Injectable, type LoggerService } from '@nestjs/common';
 import { Tool } from '@rekog/mcp-nest';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
-import { DataSource } from 'typeorm';
+import { randomUUID } from 'node:crypto';
+import { AIJobStatus, AIJobType, Prisma } from '@prisma/client';
 import { AppConfigService } from '../../config/config.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import {
   InsertSummarySchema,
   type InsertSummaryT,
 } from '../schemas/summary.schema';
-import { AiJobEntity } from '../entities/ai-job.entity';
-import { AiOutputEntity } from '../entities/ai-output.entity';
-import { AIJobStatus, AIJobType } from '../entities/ai-job.enums';
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class InsertSummaryTool {
   constructor(
-    private readonly ds: DataSource,
+    private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
     private readonly redis: RedisService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
@@ -64,18 +66,13 @@ export class InsertSummaryTool {
         }
 
         if (!lockToken && !lockAcquireErrored) {
-          const repo = this.ds.getRepository(AiJobEntity);
-          const existingJobById = await repo.findOne({
-            where: {
-              id: job_id,
-            },
+          const existingJobById = await this.prisma.aiJob.findUnique({
+            where: { id: job_id },
           });
           const existingJob =
             existingJobById ??
-            (await repo.findOne({
-              where: {
-                externalJobId: job_id,
-              },
+            (await this.prisma.aiJob.findFirst({
+              where: { externalJobId: job_id },
             }));
 
           if (!existingJob) {
@@ -91,11 +88,9 @@ export class InsertSummaryTool {
             throw new Error('AIJob does not match requested_by_id/material_id');
           }
 
-          const existingOutput = await this.ds
-            .getRepository(AiOutputEntity)
-            .findOne({
-              where: { jobId: existingJob.id },
-            });
+          const existingOutput = await this.prisma.aiOutput.findUnique({
+            where: { jobId: existingJob.id },
+          });
 
           if (existingOutput) {
             return {
@@ -124,26 +119,33 @@ export class InsertSummaryTool {
         }
       }
 
-      const saved = await this.ds.transaction(async (em) => {
-        let job = await em.findOne(AiJobEntity, {
-          where: [{ id: job_id }, { externalJobId: job_id }],
+      const saved = await this.prisma.$transaction(async (tx) => {
+        const jobById = await tx.aiJob.findUnique({
+          where: { id: job_id },
         });
+
+        let job =
+          jobById ??
+          (await tx.aiJob.findFirst({
+            where: { externalJobId: job_id },
+          }));
 
         if (!job) {
           this.logger.log(
             `AIJob not found, auto-creating for job_id=${job_id}`,
             InsertSummaryTool.name,
           );
-          job = await em.save(
-            em.create(AiJobEntity, {
-              id: job_id.length === 36 ? job_id : undefined,
+          const autoJobId = UUID_REGEX.test(job_id) ? job_id : randomUUID();
+          job = await tx.aiJob.create({
+            data: {
+              id: autoJobId,
               externalJobId: job_id,
               materialId,
               requestedById,
               type: AIJobType.SUMMARY,
               status: AIJobStatus.PROCESSING,
-            }),
-          );
+            },
+          });
         }
 
         if (
@@ -153,7 +155,7 @@ export class InsertSummaryTool {
           throw new Error('AIJob does not match requested_by_id/material_id');
         }
 
-        const existingOutput = await em.findOne(AiOutputEntity, {
+        const existingOutput = await tx.aiOutput.findUnique({
           where: { jobId: job.id },
         });
 
@@ -165,15 +167,14 @@ export class InsertSummaryTool {
           ).summary?.key_points;
 
           if (job.status !== AIJobStatus.SUCCEEDED || !job.completedAt) {
-            await em.update(
-              AiJobEntity,
-              { id: job.id },
-              {
+            await tx.aiJob.update({
+              where: { id: job.id },
+              data: {
                 status: AIJobStatus.SUCCEEDED,
                 completedAt: new Date(),
                 lastError: null,
               },
-            );
+            });
           }
 
           return {
@@ -186,8 +187,9 @@ export class InsertSummaryTool {
           };
         }
 
-        const savedOutput = await em.save(
-          em.create(AiOutputEntity, {
+        const savedOutput = await tx.aiOutput.create({
+          data: {
+            id: randomUUID(),
             materialId: job.materialId,
             jobId: job.id,
             type: job.type,
@@ -195,22 +197,21 @@ export class InsertSummaryTool {
               summary,
               sources: sources ?? [],
               warnings: warnings ?? [],
-            },
-            editedContent: null,
+            } as Prisma.InputJsonValue,
+            editedContent: Prisma.DbNull,
             isPublished: false,
             publishedAt: null,
-          }),
-        );
+          },
+        });
 
-        await em.update(
-          AiJobEntity,
-          { id: job.id },
-          {
+        await tx.aiJob.update({
+          where: { id: job.id },
+          data: {
             status: AIJobStatus.SUCCEEDED,
             completedAt: new Date(),
             lastError: null,
           },
-        );
+        });
 
         return {
           jobId: job.id,

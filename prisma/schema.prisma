@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AIJobType {
+  MCQ
+  ESSAY
+  SUMMARY
+  LKPD
+  REMEDIAL
+  DISCUSSION_TOPIC
+
+  @@map("AIJobType")
+}
+
+enum AIJobStatus {
+  ACCEPTED          @map("accepted")
+  PROCESSING        @map("processing")
+  SUCCEEDED         @map("succeeded")
+  FAILED_PROCESSING @map("failed_processing")
+  FAILED_DELIVERY   @map("failed_delivery")
+
+  @@map("AIJobStatus")
+}
+
+model AiJob {
+  id            String      @id @default(uuid())
+  materialId    String
+  requestedById String
+  type          AIJobType
+  status        AIJobStatus @default(ACCEPTED)
+  attempts      Int         @default(0)
+  parameters    Json?
+  externalJobId String?
+  lastError     String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  startedAt     DateTime?
+  completedAt   DateTime?
+  output        AiOutput?
+
+  @@index([status, createdAt], map: "AIJob_status_createdAt_idx")
+  @@index([materialId], map: "AIJob_materialId_idx")
+  @@index([requestedById], map: "AIJob_requestedById_idx")
+  @@map("AIJob")
+}
+
+model AiOutput {
+  id            String      @id @default(uuid())
+  materialId    String
+  jobId         String      @unique(map: "AIOutput_jobId_key")
+  type          AIJobType
+  content       Json
+  editedContent Json?
+  isPublished   Boolean     @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  job           AiJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([materialId, type], map: "AIOutput_materialId_type_idx")
+  @@map("AIOutput")
+}
