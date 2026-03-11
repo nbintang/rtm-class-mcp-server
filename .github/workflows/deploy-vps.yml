@@ -64,6 +64,21 @@ jobs:
           fi
 
           cd "${APP_DIR}"
+          if [ ! -w "${APP_DIR}/.git/objects" ]; then
+            echo "No write permission on ${APP_DIR}/.git/objects for user $(id -un)."
+            echo "Attempting to repair repository ownership/permissions..."
+
+            if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+              sudo chown -R "$(id -un):$(id -gn)" "${APP_DIR}"
+              sudo find "${APP_DIR}/.git" -type d -exec chmod u+rwx {} +
+              sudo find "${APP_DIR}/.git" -type f -exec chmod u+rw {} +
+            else
+              echo "Cannot auto-repair: sudo without password is unavailable."
+              ls -ld "${APP_DIR}" "${APP_DIR}/.git" "${APP_DIR}/.git/objects" || true
+              exit 1
+            fi
+          fi
+
           git fetch origin "${BRANCH}" --prune
           git reset --hard "origin/${BRANCH}"
 
